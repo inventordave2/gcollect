@@ -1,12 +1,12 @@
 // GCOLLECT_C
 
-
-#include "gcollect.h"
+#include <stdlib.h>
+#include <stdio.h>
+#include "./gcollect.h"
 
 typedef struct gc_static_records	{
 
 	uint64_t adjusted_count;
-	struct GarbageCollector core_gc;
 	uint32_t max_storage;
 	
 } gc_static_records;
@@ -49,18 +49,86 @@ static struct GarbageCollector new_gc( uint64_t size )	{
 	newgc._ = (void**) malloc( sizeof(void*) * size );
 	newgc.adjusted = (void***) malloc( sizeof(void*) * 2 * size );
 	
+	static struct gc_static_records gc_vars;
+	gc_vars.adjusted_count = 0;
+	gc_vars.max_storage = size;
+	
+	newgc.gc_vars = gc_vars;
 	return newgc;
 }
 
 void InitGC()	{
 
 	gc = newgc( GCOLLECT_MAX_NUM_REFS );
-	gc_static_vars.adjusted_count = 0;
-	gc_static_vars.max_storage = GCOLLECT_MAX_NUM_REFS;
-	gc_static_vars.core_gc = gc;
 	
 	return;
 }
+
+static void gc_err( char* msg ) {
+
+
+	char* fmtd_msg;
+
+	#ifdef DAVELIB_COLOUR_H 
+		fmtd_msg = (car*) malloc( strlen( msg ) + 1 + strlen( FG_BRIGHT_RED ) + strlen( NORMAL ) );
+		fmtd_msg[0] = '\0';
+		strcat( fmtd_msg, FG_BRIGHT_RED );
+		strcat( fmtd_msg, msg );
+		strcat( fmtd_msg, NORMAL );
+	#else
+		fmtd_msg = msg;
+	#endif
+	
+	fprintf( stderr, fmtd_msg );
+}
+
+
+static void* gc_store( void* ptr )	{
+
+	/*
+	1. Check if ptr is already stored in GC.
+	2. If not, store.
+	3. Adjusted needs to be checked too.
+	*/
+	
+	uint64_t x = 0;
+	uint64_t y = 0;
+	while( x < gc.gc_vars.max_storage )	{
+
+	
+		if( gc._[x] == ptr )
+			return ptr;
+		
+		if( gc._[x] == NULL )
+			break;
+			
+		x++;
+	}
+	
+	y = x;
+	x = 0;
+	while( x < gc.gc_vars.max_storage )	{
+	
+		if( gc.adjusted[x][1] == ptr )
+			return ptr;
+			
+		if( gc.adjusted[x][0] == ptr )
+			ptr = gc.adjusted[x][1], return ptr;
+			
+		if( gc.adjusted[x][0] == NULL )
+			break;
+			
+		x++;
+	}
+	
+	if( y == gc.gc_vars.max_storage || x == gc.gc_vars.max_storage )
+		gc_err( "The GC is full. It cannot register (thus store) any more pointers." ), return (void*)NULL;
+		
+	
+	gc._[y] = ptr;
+	return ptr;
+}
+
 
 static void* gc_inc( void* ptr )	{
 

@@ -8,6 +8,13 @@ extern "C" {
 #endif
 
 
+typedef struct gc_static_records	{
+
+	uint64_t adjusted_count;
+	uint32_t max_storage;
+	
+} gc_static_records;
+
 typedef struct GarbageCollector	{
 
 			(*store)( void* );
@@ -22,7 +29,9 @@ typedef struct GarbageCollector	{
 	
 	void*** adjusted;		
 	void**	_;
-	
+
+	struct gc_static_records gc_vars;
+
 } GarbageCollector;
 
 extern struct GarbageCollector gc;
