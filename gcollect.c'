@@ -1,0 +1,138 @@
+// GCOLLECT_C
+
+
+#include "gcollect.h"
+
+typedef struct gc_static_records	{
+
+	uint64_t adjusted_count;
+	struct GarbageCollector core_gc;
+	uint32_t max_storage;
+	
+} gc_static_records;
+
+static struct gc_static_records gc_static_vars;
+
+struct GarbageCollector gc;
+void InitGC();
+
+static void* gc_inc( void* ptr );
+static void* gc_dec( void* ptr );
+static void* gc_alloc( uint64_t size );
+static void* gc_calloc( uint64_t size );
+static void* gc_realloc( void* ptr, uint64_t new_size ); 
+static void* gc_free( void* ptr );
+static void* gc_add( void* ptr, uint64_t accum );
+static void* gc_verify( void* ptr );
+static void* gc_store( void* ptr );
+static struct GarbageCollector new_gc( uint64_t size );
+
+static struct GarbageCollector new_gc( uint64_t size )	{
+
+	struct GarbageCollector newgc;
+
+	newgc.store = gc_store;	
+	newgc.alloc = gc_alloc;
+	newgc.calloc = gc_calloc;
+	newgc.free = gc_free;
+	newgc.realloc = gc_realloc;
+	newgc.inc = gc_inc;
+	newgc.dec = gc_dec;
+	newgc.add = gc_add;
+	newgc.verify = gc_verify;
+	
+	#define GCOLLECT_MAX_NUM_REFS 65536
+	
+	if( size > GCOLLECT_MAX_NUM_REFS )
+		size = GCOLLECT_MAX_NUM_REFS;
+		
+	newgc._ = (void**) malloc( sizeof(void*) * size );
+	newgc.adjusted = (void***) malloc( sizeof(void*) * 2 * size );
+	
+	return newgc;
+}
+
+void InitGC()	{
+
+	gc = newgc( GCOLLECT_MAX_NUM_REFS );
+	gc_static_vars.adjusted_count = 0;
+	gc_static_vars.max_storage = GCOLLECT_MAX_NUM_REFS;
+	gc_static_vars.core_gc = gc;
+	
+	return;
+}
+
+static void* gc_inc( void* ptr )	{
+
+	/*
+	1. Check if ptr is in gc->adjusted (which means it has already been modified during process lifetime).
+	2. If it isn't, check if it is in gc->_ , If it isn't, is not a GC managed ptr reference.
+	3. Otherwise, if it is in gc->adjusted, increment it's "updated" column entry, otherwise, insert an entry into
+	gc->adjusted, and increment it's active (rather than original, "at-allocation-time" reference.
+	*/
+	
+	void** adj_entry;
+	
+	uint64_t x = 0;
+	uint8_t y = 0;
+	while(1)	{
+	
+		adj_entry = gc.adjusted[x];
+		if( adj_entry == NULL )
+			break;
+	
+		if( adj_entry[1] == ptr )	{
+		
+			ptr = adj_entry[1] = adj_entry[1] + 1;
+			y = 1;
+			break;
+		}
+		
+		x++;
+
+	}
+	
+	if( y )
+		return ptr;
+		
+	/*
+	If we arrive here, the ptr has not been modified. We now check the main allocation store,to see if it has been allocated via gc.
+	*/
+	
+	x = 0;
+	void* entry = NULL;
+	
+	while( 1 )	{
+	
+		entry = gc._[x];
+		if( entry==NULL )
+			break;
+			
+		if( entry==ptr )	{
+
+			gc->adjusted[ gc_static_vars.adjusted_count ][0] = ptr;
+			ptr++;
+			gc->adjusted[ gc_static_vars.adjusted_count ][1] = ptr;
+			gc_static_vars.adjusted_count += 1;
+			
+			gc->adjusted[ gc_static_vars.adjusted_count ][0] = NULL;
+			gc->adjusted[ gc_static_vars.adjusted_count ][1] = NULL;
+			
+			y = 1;
+			break;
+		}		
+		
+		x++;
+	}
+	
+	if( y==0 )
+		gc_err( "An attempt to modify a pointer not managed by the 'gc' garbage collector was made.", ptr );
+		
+	return ptr;
+}
+
+
+
+
+
+
