@@ -7,7 +7,6 @@
 extern "C" {
 #endif
 
-
 typedef struct gc_static_records	{
 
 	uint64_t adjusted_count;
@@ -21,7 +20,7 @@ typedef struct GarbageCollector	{
 	void*	(*alloc)( uint64_t );
 	void*	(*calloc)( uint64_t );
 			(*free)( void* );
-	void*	(*realloc( void* );
+	void*	(*realloc)( void* );
 			(*inc)( void* );
 			(*dec)( void* );
 			(*add)( void*, signed );
@@ -34,9 +33,8 @@ typedef struct GarbageCollector	{
 
 } GarbageCollector;
 
-extern struct GarbageCollector gc;
+extern struct GarbageCollector* gc;
 extern void InitGC();
-
 
 #ifdef _cplusplus_
 }
